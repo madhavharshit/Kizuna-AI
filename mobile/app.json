@@ -1,0 +1,1 @@
+{ "expo": { "name": "SkillBridge AR", "slug": "skillbridge-ar", "version": "1.0.0", "orientation": "portrait", "userInterfaceStyle": "light", "splash": { "backgroundColor": "#f4f6f8" }, "ios": { "supportsTablet": true }, "android": { "permissions": ["CAMERA"] } } }

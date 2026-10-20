@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>SkillBridge AR — Guided Instruction</title>
+  <style>body{margin:0;font-family:system-ui;background:#101c2b;color:white}.top{position:fixed;z-index:10;top:0;left:0;right:0;padding:14px 16px;background:rgba(16,28,43,.85);backdrop-filter:blur(6px)}.top strong{font-size:14px}.top p{font-size:12px;color:#c8d3df;margin:6px 0 0}.safety{position:fixed;z-index:10;bottom:14px;left:12px;right:12px;padding:14px;border-radius:10px;border:1px solid #e05a5c;background:rgba(78,25,32,.92);font-size:13px;line-height:1.45}.safety b{display:block;color:#ffc6c6;margin-bottom:4px}#status{position:fixed;top:90px;left:12px;z-index:10;padding:8px 10px;background:rgba(16,28,43,.85);border-radius:6px;font-size:12px}</style>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+</head>
+<body>
+  <div class="top"><strong id="title">SkillBridge AR · Training Station</strong><p id="instruction">Point your camera at the training image target.</p></div>
+  <div id="status">Waiting for camera and image target…</div>
+  <div class="safety"><b>SAFETY CHECK</b><span id="warning">Follow site safety rules. If unsure, stop and ask a qualified trainer.</span></div>
+  <a-scene mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: true; uiLoading: yes; uiScanning: yes;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+    <a-assets><img id="target-card" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" crossorigin="anonymous" /></a-assets>
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <a-entity id="tracked-target" mindar-image-target="targetIndex: 0">
+      <a-plane position="0 0.45 0" width="1.15" height="0.72" color="#10253d" opacity="0.94" material="shader: flat; side: double"></a-plane>
+      <a-text id="overlay-title" value="SKILLBRIDGE AR" color="#ffffff" align="center" width="1.05" position="0 0.62 0.01"></a-text>
+      <a-text id="overlay-step" value="Step 1: Follow the approved procedure." color="#d7f3ef" align="center" width="1.05" wrap-count="34" position="0 0.43 0.01"></a-text>
+      <a-plane position="0 0.05 0" width="0.95" height="0.19" color="#bd4146" material="shader: flat; side: double"></a-plane>
+      <a-text value="VERIFY BEFORE YOU ACT" color="#ffffff" align="center" width="0.9" position="0 0.05 0.01"></a-text>
+    </a-entity>
+  </a-scene>
+  <script>
+    const q=new URLSearchParams(location.search);
+    document.getElementById('title').textContent=q.get('title')||'SkillBridge AR · Training Station';
+    document.getElementById('instruction').textContent=q.get('step')||'Point your camera at the sample target image.';
+    document.getElementById('warning').textContent=q.get('warning')||'Follow site safety rules. If unsure, stop and ask a qualified trainer.';
+    document.getElementById('overlay-title').setAttribute('value',(q.get('title')||'APPROVED TRAINING').slice(0,46));
+    document.getElementById('overlay-step').setAttribute('value',(q.get('step')||'Step 1: Follow the approved procedure.').slice(0,130));
+    const status=document.getElementById('status');
+    document.querySelector('a-scene').addEventListener('arReady',()=>status.textContent='Camera ready — point at the sample image target.');
+    document.querySelector('a-scene').addEventListener('arError',e=>status.textContent='AR error: '+(e.detail?.error||'check camera permission and use HTTPS'));
+    document.getElementById('tracked-target').addEventListener('targetFound',()=>status.textContent='Image target found · instruction overlay active');
+    document.getElementById('tracked-target').addEventListener('targetLost',()=>status.textContent='Target lost · point at the training image');
+  </script>
+</body>
+</html>

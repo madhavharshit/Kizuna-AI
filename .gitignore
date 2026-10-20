@@ -1,0 +1,13 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/.env
+backend/storage/
+backend/.pytest_cache/
+# JS
+node_modules/
+web/node_modules/
+mobile/node_modules/
+web/dist/
+mobile/.expo/
+.DS_Store
