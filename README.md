@@ -199,7 +199,7 @@ The quality of multilingual output depends on the original source material, tran
 
 ### 1. Dashboard Overview
 
-\<!-- Save an actual screenshot as docs/screenshots/dashboard-overview\.png -->
+![SkillBridge AR Dashboard](docs/screenshots/dashboard-overview.jpeg)
 
 
 
@@ -207,31 +207,21 @@ The quality of multilingual output depends on the original source material, tran
 
 ### 2. Document Knowledge Retrieval
 
-\<!-- Save an actual screenshot as docs/screenshots/document-rag.png -->
+![Document RAG](docs/screenshots/document-rag.jpeg)
 
 
 
 *Figure 2 — Document question answering, showing a question, the generated answer, and available source references.*
 
-### 3. Video Knowledge Retrieval
-
-\<!-- Save an actual screenshot as docs/screenshots/video-rag.png -->
-
-
-
-*Figure 3 — Video knowledge retrieval, illustrating transcript-based search and relevant source timestamps.*
-
 ### 4. SOP Drafting and Expert Review
 
-\<!-- Save an actual screenshot as docs/screenshots/sop-review\.png -->
-
-
+![SOP Drafting and Expert Review](docs/screenshots/sop-review.jpeg)
 
 *Figure 4 — Reviewing a generated procedure, including editable steps, tools, warnings, and review controls.*
 
 ### 5. Approved Training Library
 
-\<!-- Save an actual screenshot as docs/screenshots/approved-procedures.png -->
+![SOP Drafting and Expert Review](docs/screenshots/approved-procedures.png)
 
 
 
@@ -239,7 +229,7 @@ The quality of multilingual output depends on the original source material, tran
 
 ### 6. Mobile Training Application
 
-\<!-- Save an actual screenshot as docs/screenshots/mobile-training.png -->
+![mobile training](docs/screenshots/mobile-training.png)
 
 
 
@@ -247,7 +237,7 @@ The quality of multilingual output depends on the original source material, tran
 
 ### 7. Augmented Reality Guidance
 
-\<!-- Save an actual screenshot as docs/screenshots/ar-guidance.png -->
+![Mobile AR guidance](docs/screenshots/ar-guidance.jpeg)
 
 
 
@@ -255,7 +245,7 @@ The quality of multilingual output depends on the original source material, tran
 
 ### 8. Quiz and Training Progress
 
-\<!-- Save an actual screenshot as docs/screenshots/training-progress.png -->
+![Quiz and progress](docs/screenshots/training-progress.png)
 
 
 
