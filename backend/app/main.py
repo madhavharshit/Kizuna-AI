@@ -1,7 +1,10 @@
 from pathlib import Path
 from datetime import datetime, timezone
 import json, shutil, re
+from typing import Literal
 from io import BytesIO
+
+from numpy import info
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -75,6 +78,8 @@ async def upload_video(file: UploadFile=File(...), db: Session=Depends(get_db)):
         from faster_whisper import WhisperModel
         model=WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
         segments, info=model.transcribe(str(path), beam_size=1, vad_filter=True)
+        detected_language = info.language
+        language_probability = float(info.language_probability)
         transcription=[]
         for seg in segments:
             text=seg.text.strip()
@@ -99,17 +104,30 @@ def ask(body: AskRequest, db: Session=Depends(get_db)):
     for ch in found:
         src=db.get(SourceModel,ch.source_id)
         sources.append({"chunk_id":ch.id,"source_id":ch.source_id,"filename":src.filename if src else "Unknown source","source_type":src.source_type if src else "unknown","reference":ch.source_ref,"timestamp_start":ch.start_seconds,"timestamp_end":ch.end_seconds,"excerpt":ch.text[:700]})
-    result=grounded_answer(body.question,found,sources)
+    result = grounded_answer(
+    body.question,
+    found,
+    sources,
+    response_language=body.response_language,
+    )
     return result
 
 @app.post("/api/procedures/draft/{source_id}")
-def create_draft(source_id:int, db: Session=Depends(get_db)):
+def create_draft(
+    source_id: int,
+    language: Literal["en", "ja"] = "en",
+    db: Session = Depends(get_db),
+):
     source=db.get(Source,source_id)
     if not source: raise HTTPException(404,"Source not found.")
     chunks=db.query(KnowledgeChunk).filter(KnowledgeChunk.source_id==source_id).order_by(KnowledgeChunk.id.asc()).limit(30).all()
     if not chunks: raise HTTPException(400,"No indexed source text is available.")
     excerpts=[{"text":c.text,"source_ref":c.source_ref,"timestamp":f"{c.start_seconds//60:02d}:{c.start_seconds%60:02d}" if c.start_seconds is not None else None} for c in chunks]
-    data=draft_procedure(source.filename,excerpts)
+    data = draft_procedure(
+    source.filename,
+    excerpts,
+    output_language=language,
+    )
     p=Procedure(title=data.get("title",f"Draft — {source.filename}"),description=data.get("description","AI draft; expert review required."),tools_json=json.dumps(data.get("tools",[])),warnings_json=json.dumps(data.get("warnings",[])),steps_json=json.dumps(data.get("steps",[])),source_id=source.id,status="draft")
     db.add(p); db.commit(); db.refresh(p)
     return procedure_out(p)

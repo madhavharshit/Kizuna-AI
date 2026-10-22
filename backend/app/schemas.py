@@ -1,9 +1,10 @@
 from pydantic import BaseModel, Field
-from typing import Any
+from typing import Any, Literal
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
     source_type: str | None = None
+    response_language: Literal["en", "ja"] = "en"
 
 class ProcedureStep(BaseModel):
     instruction: str

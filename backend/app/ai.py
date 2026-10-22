@@ -13,7 +13,32 @@ def ollama(prompt: str, json_mode: bool=False):
     except Exception:
         return None
 
-def grounded_answer(question: str, chunks: list, sources: list):
+def verification_refusal(response_language: str = "en") -> str:
+    if response_language == "ja":
+        return (
+            "取得した資料では要求された技術情報を確認できませんでした。"
+            "実際の承認済み手順書を確認するか、責任者に確認してください。"
+            "値を推測しないでください。"
+        )
+
+    return (
+        "I could not verify the requested technical information in the "
+        "retrieved material. Check the actual approved procedure or ask "
+        "the responsible supervisor. Do not guess the value."
+    )
+
+def grounded_answer(
+    question: str,
+    chunks: list,
+    sources: list,
+    response_language: str = "en",
+):
+    response_language = (
+    "ja" if response_language == "ja" else "en"
+    )
+    language_name = (
+    "Japanese" if response_language == "ja" else "English"
+    )
     """
     Answer from uploaded sources only.
     Refuse specific technical questions when the required
@@ -28,20 +53,23 @@ def grounded_answer(question: str, chunks: list, sources: list):
     # No source evidence was retrieved.
     if not context:
         return {
-            "answer": (
-                "I could not verify this in the uploaded material. "
-                "Please upload a relevant manual or ask an expert."
-            ),
+            "answer": verification_refusal(response_language),
             "sources": [],
             "grounded": False
         }
 
     # Technical parameters that must not be guessed.
     critical_terms = [
-        "torque", "rpm", "pressure", "temperature",
-        "voltage", "current", "tolerance", "clearance",
-        "speed", "force", "power", "frequency",
-        "calibration", "operating limit"
+        "torque", "トルク",
+        "rpm", "回転数",
+        "pressure", "圧力",
+        "temperature", "温度",
+        "voltage", "電圧",
+        "current", "電流",
+        "tolerance", "公差",
+        "clearance", "クリアランス",
+        "calibration", "校正",
+        "operating limit", "運転限界",
     ]
 
     # If a question asks for a specific parameter that
@@ -60,19 +88,17 @@ def grounded_answer(question: str, chunks: list, sources: list):
 
     if missing_terms:
         return {
-            "answer": (
-                "I could not verify the requested technical value "
-                f"({', '.join(missing_terms)}) in the retrieved material. "
-                "The uploaded sample manual states that it does not "
-                "define machine-specific settings. Consult the actual "
-                "approved procedure or ask the responsible supervisor. "
-                "Do not guess the value."
-            ),
+            "answer": verification_refusal(response_language),
             "sources": sources,
             "grounded": False
         }
 
     prompt = (
+        f"Respond in {language_name}. "
+        "Use only the supplied evidence. "
+        "Keep filenames, source references, timestamps, model numbers, "
+        "measurements and numeric values unchanged. "
+        "Never invent technical values or safety instructions. "
         "You are SkillBridge AR, a manufacturing training assistant. "
         "Answer ONLY using the supplied evidence. "
         "If the answer is missing, say you could not verify it. "
@@ -110,13 +136,26 @@ def fallback_steps(text: str, limit=8):
     cleaned = [s.strip(" -•\t") for s in sentences if len(s.strip()) > 25]
     return [{"instruction": s[:320], "timestamp": None, "source_ref": None} for s in cleaned[:limit]] or [{"instruction": "Review the original source and enter a verified step.", "timestamp": None, "source_ref": None}]
 
-def draft_procedure(source_name: str, excerpts: list[dict]):
+def draft_procedure(
+    source_name: str,
+    excerpts: list[dict],
+    output_language: str = "en",
+):
+    language_name = (
+        "Japanese" if output_language == "ja" else "English"
+    )
     context = "\n".join(f"[{e['source_ref']}] {e['text']}" for e in excerpts)
-    prompt = ("Create a DRAFT manufacturing SOP using ONLY the evidence below. Do not invent machine settings, "
-              "limits, tools, or safety claims. Unknown items must be listed in warnings as 'Expert confirmation required'. "
-              "Return JSON with keys title, description, tools (array), warnings (array), steps (array of objects with instruction, timestamp, source_ref). "
-              "Each step must cite a source_ref. The result is a draft requiring human review.\n\n"
-              f"SOURCE: {source_name}\nEVIDENCE:\n{context}")
+    prompt = (f"Write all user-facing SOP field values in {language_name}. "
+            "Keep JSON keys exactly in English: title, description, tools, "
+            "warnings, steps, instruction, timestamp, source_ref. "
+            "Translate the values of title, description, tools, warnings, and "
+            "steps[].instruction into the requested language. "
+            "Keep source_ref, filenames and timestamps unchanged. "
+            "Use ONLY the source evidence; do not invent machine settings, "
+            "operating limits, tools or safety claims. "
+            "Unknown items must be listed in warnings as "
+            "'Expert confirmation required'. "
+            "Return valid JSON only.")
     raw = ollama(prompt, json_mode=True)
     if raw:
         try:
