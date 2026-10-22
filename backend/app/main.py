@@ -51,7 +51,11 @@ async def upload_document(file: UploadFile=File(...), db: Session=Depends(get_db
     except Exception as e: path.unlink(missing_ok=True); raise HTTPException(400,f"Unable to read PDF: {e}")
     entries=[]
     for page_no, page in enumerate(reader.pages, start=1):
-        text=(page.extract_text() or "").strip()
+        text = re.sub(
+            r"\s+",
+            " ",
+            (page.extract_text() or "")
+        ).strip()
         if not text: continue
         for idx, chunk in enumerate(splitter.split_text(text)):
             entries.append({"text":chunk,"source_ref":f"{filename} · page {page_no}"})

@@ -14,18 +14,95 @@ def ollama(prompt: str, json_mode: bool=False):
         return None
 
 def grounded_answer(question: str, chunks: list, sources: list):
-    context = "\n\n".join(f"[{i+1}] {c.text}" for i,c in enumerate(chunks))
-    prompt = ("You are SkillBridge AR, a manufacturing training assistant. Answer ONLY from the context. "
-              "If the context does not contain the answer, say 'I could not verify this in the uploaded material. Ask an expert.' "
-              "Do not invent safety procedures, values, torque settings or machine states. Keep answer concise.\n\n"
-              f"CONTEXT:\n{context}\n\nQUESTION: {question}")
-    answer = ollama(prompt) if context else None
+    """
+    Answer from uploaded sources only.
+    Refuse specific technical questions when the required
+    parameter is not present in the retrieved evidence.
+    """
+
+    context = "\n\n".join(
+        re.sub(r"\s+", " ", c.text).strip()
+        for c in chunks
+    ).strip()
+
+    # No source evidence was retrieved.
     if not context:
-        answer = "I could not verify this in the uploaded material. Upload a relevant manual or video, or ask an expert."
-    elif not answer:
-        # No LLM installed? Safely quote retrieved evidence rather than fabricate a generated answer.
-        answer = "I found these relevant passages in the uploaded material. Please review the cited source before acting:\n\n" + "\n\n".join(f"• {c.text[:650]}" for c in chunks[:3])
-    return {"answer": answer, "sources": sources, "grounded": bool(context)}
+        return {
+            "answer": (
+                "I could not verify this in the uploaded material. "
+                "Please upload a relevant manual or ask an expert."
+            ),
+            "sources": [],
+            "grounded": False
+        }
+
+    # Technical parameters that must not be guessed.
+    critical_terms = [
+        "torque", "rpm", "pressure", "temperature",
+        "voltage", "current", "tolerance", "clearance",
+        "speed", "force", "power", "frequency",
+        "calibration", "operating limit"
+    ]
+
+    # If a question asks for a specific parameter that
+    # does not appear in the retrieved evidence, refuse.
+    requested_terms = [
+        term for term in critical_terms
+        if re.search(r"\b" + re.escape(term) + r"\b",
+                     question, re.IGNORECASE)
+    ]
+
+    missing_terms = [
+        term for term in requested_terms
+        if not re.search(r"\b" + re.escape(term) + r"\b",
+                         context, re.IGNORECASE)
+    ]
+
+    if missing_terms:
+        return {
+            "answer": (
+                "I could not verify the requested technical value "
+                f"({', '.join(missing_terms)}) in the retrieved material. "
+                "The uploaded sample manual states that it does not "
+                "define machine-specific settings. Consult the actual "
+                "approved procedure or ask the responsible supervisor. "
+                "Do not guess the value."
+            ),
+            "sources": sources,
+            "grounded": False
+        }
+
+    prompt = (
+        "You are SkillBridge AR, a manufacturing training assistant. "
+        "Answer ONLY using the supplied evidence. "
+        "If the answer is missing, say you could not verify it. "
+        "Never invent technical values or safety instructions. "
+        "Keep the answer concise.\n\n"
+        f"EVIDENCE:\n{context}\n\n"
+        f"QUESTION: {question}"
+    )
+
+    answer = ollama(prompt)
+
+    if not answer:
+        # Safe fallback if the local language model is unavailable.
+        cleaned_passages = [
+            re.sub(r"\s+", " ", c.text).strip()[:500]
+            for c in chunks[:2]
+        ]
+
+        answer = (
+            "I could not generate a complete answer because the "
+            "local AI model is unavailable. Retrieved source passages "
+            "are provided for manual review."
+            "\n\n" + "\n\n".join(cleaned_passages)
+        )
+
+    return {
+        "answer": answer,
+        "sources": sources,
+        "grounded": True
+    }
 
 def fallback_steps(text: str, limit=8):
     # Conservative draft extraction. Human approval is still required before publishing.

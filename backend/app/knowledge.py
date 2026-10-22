@@ -50,7 +50,7 @@ class KnowledgeIndex:
             candidates = db.query(KnowledgeChunk).join(
                 Source, KnowledgeChunk.source_id == Source.id
             ).filter(Source.source_type == source_type).all()
-            rows = [x[0] for x in candidates]
+            rows = candidates
             if not rows: return []
             matrix = np.asarray([json.loads(r.embedding_json) for r in rows], dtype="float32")
             qv = get_embedder().encode([query], convert_to_numpy=True, normalize_embeddings=True).astype("float32")
