@@ -1,8 +1,11 @@
+from importlib.resources import path
 from pathlib import Path
 from datetime import datetime, timezone
 import json, shutil, re
 from typing import Literal
 from io import BytesIO
+from xml.parsers.expat import model
+from fastapi import Form
 
 from numpy import info
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
@@ -68,7 +71,7 @@ async def upload_document(file: UploadFile=File(...), db: Session=Depends(get_db
     return {"source":source_out(source),"chunks_created":count,"message":"Document processed and indexed."}
 
 @app.post("/api/videos/upload")
-async def upload_video(file: UploadFile=File(...), db: Session=Depends(get_db)):
+async def upload_video(file: UploadFile=File(...), db: Session=Depends(get_db),language: str = Form("auto")):
     filename=Path(file.filename or "expert-demo.mp4").name
     if Path(filename).suffix.lower() not in {".mp4",".mov",".m4v",".webm",".mkv",".mp3",".wav",".m4a"}: raise HTTPException(400,"Supported: mp4, mov, m4v, webm, mkv, mp3, wav, m4a.")
     data=await file.read()
@@ -77,7 +80,19 @@ async def upload_video(file: UploadFile=File(...), db: Session=Depends(get_db)):
     try:
         from faster_whisper import WhisperModel
         model=WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
-        segments, info=model.transcribe(str(path), beam_size=1, vad_filter=True)
+        if language not in {"auto", "en", "ja"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Language must be auto, en, or ja",
+            )
+
+        segments, info = model.transcribe(
+            str(path),
+            beam_size=1,
+            vad_filter=True,
+            language=None if language == "auto" else language,
+        )
+        
         detected_language = info.language
         language_probability = float(info.language_probability)
         transcription=[]

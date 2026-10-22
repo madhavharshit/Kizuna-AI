@@ -93,22 +93,55 @@ def grounded_answer(
             "grounded": False
         }
 
+    if response_language == "ja":
+        language_instruction = (
+            "出力言語は日本語です。"
+            "回答は自然で分かりやすい日本語だけで書いてください。"
+            "英語の文章やフレーズを回答に混ぜないでください。"
+            "英語の根拠資料は、日本語で要約してください。"
+            "Step 1などの見出しを説明するのではなく、"
+            "実際に行う作業内容を具体的に答えてください。"
+        )
+    else:
+        language_instruction = (
+            "Write the entire answer in clear, natural English. "
+            "Do not mix in Japanese sentences. "
+            "Explain the actual action, not merely a step label."
+        )
+
     prompt = (
-        f"Respond in {language_name}. "
+        "You are SkillBridge AR, a manufacturing training assistant.\n"
+        f"{language_instruction}\n"
         "Use only the supplied evidence. "
-        "Keep filenames, source references, timestamps, model numbers, "
-        "measurements and numeric values unchanged. "
+        "Answer the user's actual question directly. "
         "Never invent technical values or safety instructions. "
-        "You are SkillBridge AR, a manufacturing training assistant. "
-        "Answer ONLY using the supplied evidence. "
-        "If the answer is missing, say you could not verify it. "
-        "Never invent technical values or safety instructions. "
+        "If the evidence does not answer the question, say you cannot verify it. "
         "Keep the answer concise.\n\n"
         f"EVIDENCE:\n{context}\n\n"
-        f"QUESTION: {question}"
+        f"QUESTION: {question}\n\n"
+        f"Write the final answer in {language_name}."
     )
 
     answer = ollama(prompt)
+
+    if answer and response_language == "ja":
+        cleanup_prompt = (
+            "次の回答を、根拠資料に基づいて、"
+            "自然で簡潔な日本語に書き直してください。\n"
+            "英語の文章を混ぜないでください。"
+            "質問に対する具体的な答えを直接述べてください。"
+            "根拠にない情報を追加してはいけません。"
+            "技術的な意味や安全上の注意を変更してはいけません。\n\n"
+            f"質問:\n{question}\n\n"
+            f"根拠資料:\n{context}\n\n"
+            f"書き直す回答:\n{answer}\n\n"
+            "日本語の回答本文だけを出力してください。"
+        )
+
+        cleaned_answer = ollama(cleanup_prompt)
+
+        if cleaned_answer:
+            answer = cleaned_answer.strip()
 
     if not answer:
         # Safe fallback if the local language model is unavailable.
@@ -117,11 +150,23 @@ def grounded_answer(
             for c in chunks[:2]
         ]
 
+        if response_language == "ja":
+            fallback_message = (
+                "ローカルAIモデルを利用できないため、"
+                "回答を生成できませんでした。"
+                "以下の資料を確認してください。"
+            )
+        else:
+            fallback_message = (
+                "I could not generate a complete answer because "
+                "the local AI model is unavailable. "
+                "Please review the retrieved source passages."
+            )
+
         answer = (
-            "I could not generate a complete answer because the "
-            "local AI model is unavailable. Retrieved source passages "
-            "are provided for manual review."
-            "\n\n" + "\n\n".join(cleaned_passages)
+            fallback_message
+            + "\n\n"
+            + "\n\n".join(cleaned_passages)
         )
 
     return {
