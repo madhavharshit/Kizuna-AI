@@ -2,7 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {ActivityIndicator,Alert,Linking,SafeAreaView,ScrollView,StatusBar,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 import {CameraView,useCameraPermissions} from 'expo-camera';
 const API=(process.env.EXPO_PUBLIC_API_URL||'http://localhost:8000').replace(/\/$/,'');
-const AR=(process.env.EXPO_PUBLIC_AR_URL||'https://hiukim.github.io/mind-ar-js-doc/examples/basic/').replace(/\/$/,'')+'/';
+const AR=(process.env.EXPO_PUBLIC_AR_URL||'http://localhost:8080/ar/').replace(/\/$/,'')+'/';
 async function get(path){const r=await fetch(API+path);const j=await r.json();if(!r.ok)throw new Error(j.detail||'API request failed');return j}
 async function post(path,body){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.detail||'API request failed');return j}
 export default function App(){
