@@ -45,7 +45,7 @@ Save screenshots from the actual running application in `docs/screenshots/`. Git
 
 ### 7. Augmented Reality Guidance
 
-![AR Guidance](docs/screenshots/ar-guidance.png)
+![AR Guidance](docs/screenshots/ar-guidance.jpeg)
 
 ### 8. Training Progress
 
