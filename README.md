@@ -33,7 +33,7 @@ Save screenshots from the actual running application in `docs/screenshots/`. Git
 
 ### 4. SOP Generation and Expert Review
 
-![SOP Review](docs/screenshots/sop-review.png)
+![SOP Review](docs/screenshots/sop-review.jpeg)
 
 ### 5. Approved Training Library
 
