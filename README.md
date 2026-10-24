@@ -17,8 +17,6 @@ It transforms technical manuals and training videos into searchable knowledge, g
 
 ## Application Screenshots
 
-Save screenshots from the actual running application in `docs/screenshots/`. GitHub will display each image when the file exists at the specified path.
-
 ### 1. Dashboard Overview
 
 ![SkillBridge AR Dashboard](docs/screenshots/dashboard-overview.jpeg)
@@ -150,8 +148,6 @@ SkillBridge-AR/
 ├── .gitignore
 └── README.md
 ```
-
-This is a high-level view; retain the actual files and folders present in your repository.
 
 ## Setup and Execution
 
