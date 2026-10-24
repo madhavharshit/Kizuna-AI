@@ -2,6 +2,7 @@ from importlib.resources import path
 from pathlib import Path
 from datetime import datetime, timezone
 import json, shutil, re
+import logging
 from typing import Literal
 from io import BytesIO
 from xml.parsers.expat import model
@@ -19,6 +20,10 @@ from .schemas import AskRequest, ProcedureUpdate, ReviewRequest, ProgressRequest
 from .config import UPLOAD_DIR, CORS_ORIGINS, WHISPER_MODEL
 from .knowledge import knowledge_index
 from .ai import grounded_answer, draft_procedure
+from .transcription import transcribe_video
+from .source_evidence import load_source_excerpts
+
+logger = logging.getLogger(__name__)
 
 # Create tables at launch. The Postgres service must be running first.
 Base.metadata.create_all(bind=engine)
@@ -78,34 +83,29 @@ async def upload_video(file: UploadFile=File(...), db: Session=Depends(get_db),l
     if len(data)>200*1024*1024: raise HTTPException(413,"MVP upload limit is 200 MB.")
     path=UPLOAD_DIR / f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{filename}"; path.write_bytes(data)
     try:
-        from faster_whisper import WhisperModel
-        model=WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
-        if language not in {"auto", "en", "ja"}:
-            raise HTTPException(
-                status_code=400,
-                detail="Language must be auto, en, or ja",
-            )
-
-        segments, info = model.transcribe(
-            str(path),
-            beam_size=1,
-            vad_filter=True,
-            language=None if language == "auto" else language,
-        )
-        
+        transcription, info = transcribe_video(str(path), language, filename)
         detected_language = info.language
         language_probability = float(info.language_probability)
-        transcription=[]
-        for seg in segments:
-            text=seg.text.strip()
-            if text: transcription.append({"text":text,"source_ref":f"{filename} · {int(seg.start//60):02d}:{int(seg.start%60):02d}","start_seconds":int(seg.start),"end_seconds":int(seg.end)})
-        if not transcription: raise RuntimeError("No speech detected in the video/audio file.")
     except Exception as e:
+        logger.exception("Video transcription failed: requested_language=%s model=%s", language, WHISPER_MODEL)
         path.unlink(missing_ok=True)
-        raise HTTPException(500,f"Transcription failed: {e}. Check that the file has audible speech and retry with a shorter clip.")
+        raise HTTPException(500,f"Transcription failed: {e}. Check the audio and local Whisper model, then retry.")
     source=Source(source_type="video",filename=filename,file_path=str(path)); db.add(source); db.commit(); db.refresh(source)
     count=make_chunks(db, source, transcription)
-    return {"source":source_out(source),"chunks_created":count,"transcript":transcription,"message":"Audio transcribed and timestamped."}
+    transcript_length = sum(len(item["text"]) for item in transcription)
+    language_warning = None
+    if language != "auto" and detected_language != language:
+        language_warning = f"Requested {language}, but Whisper detected {detected_language}. Review transcript language and accuracy before drafting."
+    elif language_probability < 0.55:
+        language_warning = "Whisper language confidence is low. Review the transcript before drafting."
+    logger.info("Video transcription complete: source_id=%s filename=%s requested_language=%s detected_language=%s language_probability=%.3f segments=%s transcript_characters=%s usable_text=%s chunks=%s",
+                source.id, filename, language, detected_language, language_probability, len(transcription), transcript_length, bool(transcript_length), count)
+    return {"source":source_out(source),"chunks_created":count,"transcript":transcription,
+            "transcription":{"requested_language":language,"detected_language":detected_language,
+                             "language_probability":language_probability,"segment_count":len(transcription),
+                             "transcript_characters":transcript_length,"usable_text":bool(transcript_length),
+                             "accuracy_verified":False,"warning":language_warning},
+            "message":"Audio transcribed and timestamped." if not language_warning else "Audio transcribed and timestamped; transcript review recommended."}
 
 @app.get("/api/sources")
 def list_sources(db: Session=Depends(get_db)):
@@ -119,6 +119,13 @@ def ask(body: AskRequest, db: Session=Depends(get_db)):
     for ch in found:
         src=db.get(SourceModel,ch.source_id)
         sources.append({"chunk_id":ch.id,"source_id":ch.source_id,"filename":src.filename if src else "Unknown source","source_type":src.source_type if src else "unknown","reference":ch.source_ref,"timestamp_start":ch.start_seconds,"timestamp_end":ch.end_seconds,"excerpt":ch.text[:700]})
+    # Protect source-specific filters and citation provenance at the API boundary.
+    if body.source_type:
+        found = [chunk for chunk in found if db.get(KnowledgeChunk, chunk.id).source_id in {
+            source.id for source in db.query(Source).filter(Source.source_type == body.source_type).all()
+        }]
+        allowed_ids = {chunk.id for chunk in found}
+        sources = [item for item in sources if item["chunk_id"] in allowed_ids]
     result = grounded_answer(
     body.question,
     found,
@@ -135,14 +142,21 @@ def create_draft(
 ):
     source=db.get(Source,source_id)
     if not source: raise HTTPException(404,"Source not found.")
-    chunks=db.query(KnowledgeChunk).filter(KnowledgeChunk.source_id==source_id).order_by(KnowledgeChunk.id.asc()).limit(30).all()
-    if not chunks: raise HTTPException(400,"No indexed source text is available.")
-    excerpts=[{"text":c.text,"source_ref":c.source_ref,"timestamp":f"{c.start_seconds//60:02d}:{c.start_seconds%60:02d}" if c.start_seconds is not None else None} for c in chunks]
-    data = draft_procedure(
-    source.filename,
-    excerpts,
-    output_language=language,
-    )
+    logger.info("SOP draft requested: source_id=%s source_type=%s language=%s", source.id, source.source_type, language)
+    excerpts = load_source_excerpts(db, source_id)
+    if not excerpts: raise HTTPException(422,"This source has no indexed transcript or document chunks. No SOP was created.")
+    if any(excerpt["source_id"] != source.id for excerpt in excerpts):
+        logger.error("Source isolation failure while drafting: selected_source_id=%s", source.id)
+        raise HTTPException(500,"Source evidence could not be isolated safely. No SOP was created.")
+    try:
+        data = draft_procedure(source.filename, excerpts, output_language=language)
+    except ValueError as exc:
+        logger.warning("SOP draft refused: source_id=%s reason=%s", source.id, str(exc))
+        raise HTTPException(422, str(exc)) from exc
+    if data.get("evidence_quality") == "limited":
+        limited_note = "LIMITED DRAFT: " + (data.get("validation_explanation") or "Only some actions are supported; expert review must fill evidence gaps.")
+        data["warnings"] = [*data.get("warnings", []), limited_note]
+        logger.info("Limited SOP draft created: source_id=%s reason=%s", source.id, limited_note)
     p=Procedure(title=data.get("title",f"Draft — {source.filename}"),description=data.get("description","AI draft; expert review required."),tools_json=json.dumps(data.get("tools",[])),warnings_json=json.dumps(data.get("warnings",[])),steps_json=json.dumps(data.get("steps",[])),source_id=source.id,status="draft")
     db.add(p); db.commit(); db.refresh(p)
     return procedure_out(p)
